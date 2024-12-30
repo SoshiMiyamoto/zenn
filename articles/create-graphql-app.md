@@ -2,7 +2,7 @@
 title: "GraphQLで適当にアプリを作ってみた"
 emoji: "📘"
 type: "tech" # tech: 技術記事 / idea: アイデア
-topics: ["GraphQL", "Docker", "React" "PostgreSQL"]
+topics: ["GraphQL", "Docker", "React", "PostgreSQL"]
 published: false
 ---
 
