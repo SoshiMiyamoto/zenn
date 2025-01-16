@@ -19,7 +19,7 @@ GraphQLにさわる機会があったので、勉強がてら遊んでみるこ�
 ### 構成図
 せっかくなので、フロントエンド、バックエンド、およびデータベースをすべてdockerコンテナ化し、docker-composeで管理することとする。
 
-![](/images/articles/graphql-app/vue_3.png)
+![](/images/articles/graphql-app/architecture.png)
 
 シンプルですが絵で表現するの大事ですね。
 
