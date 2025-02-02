@@ -7,17 +7,17 @@ published: false
 ---
 
 ## はじめに
-GraphQLにさわる機会があったので、勉強がてら遊んでみることにした。
+AWS AppSyncについて調べてみて、結局GraphQLをマネージドでできるサービスなんだからGraphQL触ったらええやん、ってなり遊んでみることにしました。
 
 ## 作成するアプリおよび構成
 
 ### 作成するアプリケーション
-今回は超簡単なタスク管理アプリを作成してみる。以下のような画面イメージ。
+今回は超簡単なタスク管理アプリを作成してみます。以下のような画面イメージ。
 
 ![](/images/articles/graphql-app/vue_3.png)
 
 ### 構成図
-せっかくなので、フロントエンド、バックエンド、およびデータベースをすべてdockerコンテナ化し、docker-composeで管理することとする。
+せっかくなので、フロントエンド、バックエンド、およびデータベースをすべてdockerコンテナ化し、docker-composeで管理することとします。
 
 ![](/images/articles/graphql-app/architecture.png)
 
@@ -26,7 +26,10 @@ GraphQLにさわる機会があったので、勉強がてら遊んでみるこ�
 
 ### フォルダ構成
 
-- 今回作成したアプリケーションのフォルダ構成はこんな感じ。
+今回作成したアプリケーションのフォルダ構成はこんな感じ。<br>
+- `graphql-app`：graphqlのAPIのソースコードを管理しているディレクトリ
+- `graphql-frontend`：フロントエンドのソースコードを管理しているディレクトリ
+
 
 ```bash
 graphql
@@ -55,10 +58,28 @@ graphql
     └── vite.config.js
 ```
 
-## 用語
+## その前に
 
 ### GarphQLとは
 
+GraphQLは[公式HP](https://graphql.org/)に記載の通り、APIのためのクエリ言語となります。
+APIを作成するための決まった構文があるんだなーと思えばいいかと思います。
+
+よく対比されるのがREST APIですが、これは、エンドポイントやHTTPのMethod (GET, POST, OPTIONS, etc.)によってデータのやり取りを行います。
+それに対して、GraphQLは、エンドポイントは同一で、POST Methodの中にクエリ言語を埋め込むことでデータのやり取りを行います。
+
+それぞれのメリット/デメリットは[こちら](https://kinsta.com/jp/blog/graphql-vs-rest/)、
+REST APIとの挙動の違いは[こちら](https://hasura.io/learn/ja/graphql/intro-graphql/graphql-vs-rest/)を見るとわかりやすいかと思います。
+
+### 用語
+
+|用語|意味|
+|---|---|
+|Schema|APIのデータ構造の定義。GraphQLスキーマ言語（SDL）で記述される。|
+|Query|オペレーションの１つ。データを取得する際に利用する。|
+|Mutation|オペレーションの1つ。データを作成、更新、削除するときに利用する。|
+|Subscription|オペレーションの1つ。リアルタイム更新を可能にする。|
+|Resolver|オペレーションの中身(挙動)を定義する。|
 
 
 ## 環境
@@ -70,6 +91,12 @@ graphql
 
 ## 手順
 
+### バックエンド (Apollo Server, PostgreSQL)
+
+まずは、Apollo Server (GraphQLのサーバーサイド実装のためのオープンソースライブラリ) を使って、バックエンド処理を作成してきます。
+
+以下のようにTypescriptのプロジェクトを作成します。
+
 ```bash
 $ mkdir graphql-app
 $ cd graphql-app/
@@ -77,7 +104,7 @@ $ npm init -y
 $ npm install --save-dev typescript @types/node ts-node
 $ npx tsc --init
 ```
-と打つと、
+を実行すると、以下の用にセットアップが完了します。
 
 ```bash
 Created a new tsconfig.json with:                                                                                           
@@ -89,28 +116,33 @@ Created a new tsconfig.json with:
   skipLibCheck: true
   forceConsistentCasingInFileNames: true
 ```
-必要なパッケージをインストールします。
+以下のように、必要なパッケージをインストールします。
 
 ```bash
 npm install express @types/express
 npm install @apollo/server graphql
 npm install --save-dev prisma
-npm install --save-dev cors nodemon @types/cors
-
+npm install --save-dev cors ts-node nodemon @types/cors
 ```
+- `express`は、node.jsのためのWebアプリケーションライブラリで、`@types/express`はtypescriptの型定義パッケージです。
+- `prisma`は、ORM (Object-Relational-Mapping)のライブラリで、データベースとのやり取りを扱いやすくするために使用します。
+- `cors`はCORS対応のため、`ts-node`はtypescriptを直接実行するため、 `nodemone` はコードの変更を自動で検知してnode.jsのプロセスを再起動するために使用します。（後程書きますが、結局 `ts-node`, `nodemon`は使いませんでした。)
 
-package.jsonに起動スクリプト追加
+package.jsonに起動をスクリプトを追加します。
+これにより、`npm start` コマンドで、記載したコマンドが実行されるようになります。
 
-```diff_json:    package.json
+```diff json:package.json
 "scripts": {
 +    "start": "nodemon --exec ts-node --esm index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
 },
 ```
 
-docker-composeにて、postgresのdbを起動するための設定を記載。
+次に、データベース (PostgreSQL) を起動します。<br>
+docker-composeで、postgresのdbを起動するための設定を記載します。（`docker-compoes.yml`はディレクトリ階層が `grapqhl-app`より1つ上になってます。)
 
-```yaml
+
+```yaml:docker-compose.yml
 version: '3'
 
 services:
@@ -128,25 +160,29 @@ services:
 
 ```
 
-- 起動する。
+以下コマンドで起動する。
 
 ```bash
 $ docker compose up -d 
 ```
 
-- DBにログインする。
+以下コマンドでDBにログインできるようになります。
 
 ```bash
 $ docker exec -it postgres_container psql -U myuser -d postgres
 ```
 
-### Prisma
+
+次にPrismaの設定を追加していきます。
+再度、`graphql-app` ディレクトリに移動し、以下コマンドを実行します。
 
 ```bash
-npx prisma init
+$ npx prisma init
 ```
+各種ファイルが生成されます。
+localhostで起動しているデータベースの設定を追加していきます。
 
-```prisma:schema.prisma
+```:schema.prisma
 generator client {
   provider = "prisma-client-js"
 }
@@ -157,7 +193,7 @@ datasource db {
 }
 ```
 
-```env: .env
+```diff: .env
 - DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public"
 + DATABASE_URL="postgresql://myuser:password@localhost:5432/postgres?schema=public"
 ```
@@ -778,3 +814,11 @@ app.mount('#app');
 
 ```
 
+この通り、タスク管理アプリが完成した。
+
+![](/images/articles/graphql-app/vue_3.png)
+
+
+## 参考
+
+- https://zenn.dev/azunasu/articles/26556e1d21da0d
