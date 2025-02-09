@@ -65,11 +65,13 @@ graphql
 GraphQLは[公式HP](https://graphql.org/)に記載の通り、APIのためのクエリ言語となります。
 APIを作成するための決まった構文があるんだなーと思えばいいかと思います。
 
-よく対比されるのがREST APIですが、これは、エンドポイントやHTTPのMethod (GET, POST, OPTIONS, etc.)によってデータのやり取りを行います。
+よく対比されるのがREST APIですが、これは、エンドポイントを分けたり、HTTPのMethod (GET, POST, OPTIONS, etc.)を使い分けたりすることでデータのやり取りを行います。
 それに対して、GraphQLは、エンドポイントは同一で、POST Methodの中にクエリ言語を埋め込むことでデータのやり取りを行います。
 
 それぞれのメリット/デメリットは[こちら](https://kinsta.com/jp/blog/graphql-vs-rest/)、
 REST APIとの挙動の違いは[こちら](https://hasura.io/learn/ja/graphql/intro-graphql/graphql-vs-rest/)を見るとわかりやすいかと思います。
+
+また、GraphQLを理解するために必須の用語について、以下に整理しておきます。
 
 ### 用語
 
@@ -89,11 +91,13 @@ REST APIとの挙動の違いは[こちら](https://hasura.io/learn/ja/graphql/i
 - Nodejs: 18.19.1
 - npm: 9.2.0
 
-## 手順
+## 実際に構築してみる
 
 ### バックエンド (Apollo Server, PostgreSQL)
 
 まずは、Apollo Server (GraphQLのサーバーサイド実装のためのオープンソースライブラリ) を使って、バックエンド処理を作成してきます。
+
+#### プロジェクトの作成
 
 以下のようにTypescriptのプロジェクトを作成します。
 
@@ -133,13 +137,16 @@ package.jsonに起動をスクリプトを追加します。
 
 ```diff json:package.json
 "scripts": {
-+    "start": "nodemon --exec ts-node --esm index.ts",
++   "start": "nodemon --exec ts-node --esm index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
 },
 ```
+#### データベースの作成
 
 次に、データベース (PostgreSQL) を起動します。<br>
-docker-composeで、postgresのdbを起動するための設定を記載します。（`docker-compoes.yml`はディレクトリ階層が `grapqhl-app`より1つ上になってます。)
+docker-composeで、PostgreSQLのDBを起動するための設定を記載します。
+
+※ `docker-compoes.yml`はディレクトリ階層が `grapqhl-app`より1つ上になってます。
 
 
 ```yaml:docker-compose.yml
@@ -172,6 +179,7 @@ $ docker compose up -d
 $ docker exec -it postgres_container psql -U myuser -d postgres
 ```
 
+#### Prisma
 
 次にPrismaの設定を追加していきます。
 再度、`graphql-app` ディレクトリに移動し、以下コマンドを実行します。
@@ -193,25 +201,27 @@ datasource db {
 }
 ```
 
-```diff: .env
+```diff :.env
 - DATABASE_URL="postgresql://johndoe:randompassword@localhost:5432/mydb?schema=public"
 + DATABASE_URL="postgresql://myuser:password@localhost:5432/postgres?schema=public"
 ```
 
-- モデルの定義
+さらに、モデルの定義を追加してきます。<br>
+ここに記載する内容が、PostgreSQLのDBのテーブルとなります。<br>
 
 ```prisma: schema.prisma
-
 model task {
   id       Int    @id @default(autoincrement())
   title    String
   deadline String
   complete Boolean
 }
-
 ```
+`complete`なるタスク完了フラグを準備しましたが、実は今回使いませんでした。。。
 
-- マイグレーション
+
+次に、以下の通り、マイグレーションを実行します。<br>
+こうすることで、PostgreSQL側でテーブルが作成されます。
 
 ```bash
 
@@ -230,6 +240,8 @@ npx prisma migrate dev
 # ✔ Generated Prisma Client (v6.1.0) to ./node_modules/@prisma/client in 381ms
 
 ```
+
+#### ソースコードの記述
 
 以下のコードを記載する。
 
@@ -330,60 +342,15 @@ await new Promise<void>((resolve) => app.listen({ port: port }, resolve));
 console.log(`🚀 Server ready at http://localhost:${port}/`);
 ```
 
-- awaitのところで以下のエラーが
-```bash
-Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.ts(1378)
-```
+ソースコードについて簡単に解説します。
 
-- tsconfigの`module`オプションと、`target`を変更せよ、とのことなので、それぞれ、`NodeNext`, `ESNext`に変更する。
+※ このタイミングで躓き事項は[トラブルシューティング](#トラブルシューティング)に記載しました。
 
-- 今度は以下のエラーが。
-```bash
-The current file is a CommonJS module and cannot use 'await' at the top level.ts(1309)
-```
+まず、
 
-- package.jsonに、`"type": "module"` を追加した。
-- `expressMiddleware` について、expressと、apolloのexpressで競合して要るっぽいエラーが出るがここは無視しても動いたので無視する。
 
-ここで、アプリケーションを立ち上げてみる。
 
-```bash
-$ npm start
-```
-すると、以下のエラーが。
-
-```bash
-TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts" for ./graphql-app/index.ts
-    at new NodeError (node:internal/errors:405:5)
-    at Object.getFileProtocolModuleFormat [as file:] (node:internal/modules/esm/get_format:136:11)
-    at defaultGetFormat (node:internal/modules/esm/get_format:182:36)
-    at defaultLoad (node:internal/modules/esm/load:101:20)
-    at nextLoad (node:internal/modules/esm/hooks:864:28)
-    at load (/mnt/c/Users/soshi/Documents/Program/graphql-app/node_modules/ts-node/dist/child/child-loader.js:19:122)
-    at nextLoad (node:internal/modules/esm/hooks:864:28)
-    at Hooks.load (node:internal/modules/esm/hooks:447:26)
-    at MessagePort.handleMessage (node:internal/modules/esm/worker:196:24)
-    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:786:20) {
-  code: 'ERR_UNKNOWN_FILE_EXTENSION'
-
-```
-
-いろいろ解決策を調べたが、以下で何とかなった。
-
-```bash
-$ npm install --save-dev tsx
-```
-package.jsonを変更する。
-
-```diff_json: package.json
-  "scripts": {
--    "start": "nodemon --exec ts-node --esm index.ts",
-+    "start": "npx tsx index.ts"
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-```
-
-- これで起動した
+そして、以下のように `npm start`でサーバを立ち上げます。
 
 ```bash
 $ npm start
@@ -394,20 +361,15 @@ $ npm start
 🚀 Server ready at http://localhost:3000/
 ```
 
+そして、`http://localhost:3000/api`にブラウザでアクセスすると、以下のキャプチャのようにApollo Serverの画面が立ち上がります。
+この画面で、ソースコードで定義したQuery, Mutationが画面で実行できるようになります。
+
 ![](/images/articles/graphql-app/apollo-server-top.png)
 
-- ためしに、query, mutaionを実行してみる。
-- まず、Queryから。以下を実行してみる。
-```bash 
-query greeting {
-  greeting
-}
-```
-- 以下のように、右ペインにResponseが表示される。
+Query, Mutaionを実行してみます。
+まず、Queryからやってみます。
 
-![](/images/articles/graphql-app/apollo-server-sample1.png)
-
-- 次に、`getTask`を実行する。
+画面に以下を入力して、再生ボタンを押下し、`getTask`を実行してみます。
 
 ```bash
 query getTask{
@@ -420,10 +382,10 @@ query getTask{
 }
 ```
 
-- まだ何もタスクを入力していないので、空の値が返ってくる。
+すると、以下のように、まだ何もタスクがデータベースに格納されていないので、空の値が返ってきます。
 ![](/images/articles/graphql-app/apollo-server-sample2.png)
 
-- タスクを挿入してみる。
+次に、Mutationでタスクを挿入してみる。
 
 ```bash
 mutation addTask($title: String!,  $deadline: String) {
@@ -435,7 +397,7 @@ mutation addTask($title: String!,  $deadline: String) {
   }
 }
 ```
-を、入力し、画面下部の`Variables`に以下を入力後、実行する。
+を、入力し、画面下部の`Variables`に以下を入力後、同様に実行します。
 
 ```bash
 {
@@ -447,11 +409,13 @@ mutation addTask($title: String!,  $deadline: String) {
 - 値が入力されたことがわかる（idが5なのはその前に遊んでいたから）。
 ![](/images/articles/graphql-app/apollo-server-sample3.png)
 
-- 再度、`getTask`を実行すると、値が挿入されていることがわかる。
+- 再度、`getTask`を実行すると、値が挿入されていることがわかります。
 ![](/images/articles/graphql-app/apollo-server-sample4.png)
 
 
-- 次に、このapollo-serverをdockerコンテナ化する。以下のようにdockerfileを作成する。
+次に、このapollo-serverをdockerコンテナ化して、PostgreSQLコンテナが稼働しているコンテナと同時に起動するようにdocker-composeを編集します。
+まず、以下のようにdockerfileを作成します。
+
 ```dockerfile
 FROM node:20-alpine3.19
 WORKDIR /app
@@ -462,18 +426,19 @@ EXPOSE 3000
 CMD ["npm", "start"]
 ```
 
-- docker-compose.yamlを以下のように修正する。
-```diff_yaml: docker-compose.yml
+次に、docker-compose.yamlを以下のように修正する。
+
+```diff yaml: docker-compose.yml
 version: '3'
 
 services:
-+  app:
-+      build:
-+        context: ./graphql-app
-+        dockerfile: dockerfile
-+      container_name: graphql
-+      ports:
-+        - "3000:3000"
++ app:
++   build:
++     context: ./graphql-app
++      dockerfile: dockerfile
++   container_name: graphql
++   ports:
++     - "3000:3000"
 
   db:
     image: postgres:17.2
@@ -489,11 +454,23 @@ services:
 
 ```
 
-- ここで、prismaの`.env`ファイルにて、dbの接続情報に記載の `localhost`を `db`に変更する。
-```diff_env:.env
+ここで、prismaの`.env`ファイルにて、dbの接続情報に記載の `localhost`を `db`に変更する。
+docker-composeに組み込まれると、Apollo Serverはdocker-composeに記載の、`db`という名前で解決されるようになります。
+
+```diff env:.env
 - DATABASE_URL="postgresql://myuser:password@localhost:5432/postgres?schema=public"
 + DATABASE_URL="postgresql://myuser:password@db:5432/postgres?schema=public"
 ```
+以下コマンドで、実行します。
+```bash
+$ docker compose up -d
+```
+
+うまく起動しないので、
+```bash
+$ docker compose logs -f 
+```
+でログを確認すると、以下のようなエラーが発生していました。
 
 ```bash
 graphql-app         | PrismaClientInitializationError: Prisma Client could not locate the Query Engine for runtime "linux-musl-openssl-3.0.x".   
@@ -509,27 +486,28 @@ postgres_container  | selecting default "max_connections" ... 100
 graphql-app         | }
 ```
 
-- なにやらopenssl関連のエラーが出ているが、エラーの通り、`prisma.schema`に以下の記載をする。
-```diff_schema:prisma.schema
+なにやらopenssl関連のエラーが出ていますので、エラー文言に記載の通り、`prisma.schema`に以下の記載します。
+
+```diff schema:prisma.schema
 generator client {
   provider = "prisma-client-js"
-+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
++ binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 ```
 
-- 以下コマンドを実行する。
+prisma関連のファイルを修正したので、以下コマンドを実行します。
 ```bash
 $ npx prisma generate
 ```
 
-docker compose down実施後、docker rmi でイメージを消して再度、docker compose up -d を実行
-
-- うまくいった。
+`docker compose down` 実行後、`docker rmi` でイメージを消して再度、`docker compose up -d` を実行したところうまく起動しました。
 
 
 ## フロントエンド
 
-- graphqlフォルダの下で以下を実行
+次に、フロントエンドをVue.jsで構築していきます。
+`graphql`ディレクトリの下で以下を実行します。
+今回はプロジェクト名を`graphql-frontend`にしました。
 
 ```bash
 npm create vue@latest
@@ -544,16 +522,20 @@ npm create vue@latest
 ✔ Add ESLint for code quality? › No
 ```
 
+その後、以下コマンドで依存パッケージをインストール後、起動します。
+
 ```bash
 $ cd graphql-frontend/
 $ npm install
 $ npm run dev
 ```
-一旦、`http://localhost:5173/` にアクセスして、vue.jsのサンプル画面が表示されるか確認する。
+一旦、`http://localhost:5173/` にアクセスして、vue.jsのサンプル画面が表示されるか確認してみます。
 
 ![](/images/articles/graphql-app/vue_1.png)
 
-続いて、実際にコードを書いてみたいと思う。、
+うまく起動できていました。
+続いて、実際にコードを書いてみたいと思います。
+
 
 ```bash
 $ npm install @vue/apollo-composable @apollo/client graphql graphql-tag
@@ -822,3 +804,60 @@ app.mount('#app');
 ## 参考
 
 - https://zenn.dev/azunasu/articles/26556e1d21da0d
+
+## トラブルシューティング
+
+- awaitのところで以下のエラーが
+```bash
+Top-level 'await' expressions are only allowed when the 'module' option is set to 'es2022', 'esnext', 'system', 'node16', 'nodenext', or 'preserve', and the 'target' option is set to 'es2017' or higher.ts(1378)
+```
+
+- tsconfigの`module`オプションと`target`オプションを変更せよ、とのことなので、それぞれ、`NodeNext`, `ESNext`に変更する。
+
+- 今度は以下のエラーが。
+```bash
+The current file is a CommonJS module and cannot use 'await' at the top level.ts(1309)
+```
+
+- package.jsonに、`"type": "module"` を追加した。
+- `expressMiddleware` について、expressと、apolloのexpressで競合して要るっぽいエラーが出るがここは無視しても動いたので無視する。
+
+ここで、アプリケーションを立ち上げてみる。
+
+```bash
+$ npm start
+```
+すると、以下のエラーが。
+
+```bash
+TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".ts" for ./graphql-app/index.ts
+    at new NodeError (node:internal/errors:405:5)
+    at Object.getFileProtocolModuleFormat [as file:] (node:internal/modules/esm/get_format:136:11)
+    at defaultGetFormat (node:internal/modules/esm/get_format:182:36)
+    at defaultLoad (node:internal/modules/esm/load:101:20)
+    at nextLoad (node:internal/modules/esm/hooks:864:28)
+    at load (/mnt/c/Users/soshi/Documents/Program/graphql-app/node_modules/ts-node/dist/child/child-loader.js:19:122)
+    at nextLoad (node:internal/modules/esm/hooks:864:28)
+    at Hooks.load (node:internal/modules/esm/hooks:447:26)
+    at MessagePort.handleMessage (node:internal/modules/esm/worker:196:24)
+    at [nodejs.internal.kHybridDispatch] (node:internal/event_target:786:20) {
+  code: 'ERR_UNKNOWN_FILE_EXTENSION'
+
+```
+
+いろいろ解決策を調べたが、以下で何とかなった。
+
+```bash
+$ npm install --save-dev tsx
+```
+package.jsonを変更する。
+
+```diff_json: package.json
+  "scripts": {
+-    "start": "nodemon --exec ts-node --esm index.ts",
++    "start": "npx tsx index.ts"
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+```
+
+- これで起動した
