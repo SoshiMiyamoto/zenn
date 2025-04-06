@@ -385,7 +385,7 @@ query getTask{
 すると、以下のように、まだ何もタスクがデータベースに格納されていないので、空の値が返ってきます。
 ![](/images/articles/graphql-app/apollo-server-sample2.png)
 
-次に、Mutationでタスクを挿入してみる。
+次に、Mutationでタスクを挿入してみます。
 
 ```bash
 mutation addTask($title: String!,  $deadline: String) {
@@ -406,7 +406,7 @@ mutation addTask($title: String!,  $deadline: String) {
 }
 ```
 
-- 値が入力されたことがわかる（idが5なのはその前に遊んでいたから）。
+- 値が入力されたことがわかります（idが5なのはその前に遊んでいたから）。
 ![](/images/articles/graphql-app/apollo-server-sample3.png)
 
 - 再度、`getTask`を実行すると、値が挿入されていることがわかります。
@@ -426,7 +426,7 @@ EXPOSE 3000
 CMD ["npm", "start"]
 ```
 
-次に、docker-compose.yamlを以下のように修正する。
+次に、docker-compose.yamlを以下のように修正します。
 
 ```diff yaml: docker-compose.yml
 version: '3'
@@ -685,20 +685,27 @@ export default {
 ```bash
 npm install react
 ```
-を実行する。
+を実行してみます。
 
-すると、うまくいった。
-タスクを追加したり、削除ができるようになっているかと思う。
+すると、うまくいきました。
+タスクを追加したり、削除ができるようになっていますね。
 
 ![](/images/articles/graphql-app/vue_2.png)
 
+画面がちょっとまだダサいので、ちょっとアレンジしてます。
+`npm`で`vuetify`をインストールして、各ファイルを次の通り修正します。
+ソースコードの細かい解説は割愛します。
+
+（いまどき生成AIとかでチャット生成できますしね）
 
 ```bash
 npm install vuetify@next
 npm install vite-plugin-vuetify
 ```
 
-```js:vite.config.js
+`vite.cinfig.js`を以下のように修正します。
+
+```diff js:vite.config.js
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
@@ -720,7 +727,9 @@ export default defineConfig({
 })
 ```
 
-```js:main.js
+そして、`main.js`を以下のように修正します。
+
+```diff js:main.js
 import { createApp, provide, h } from 'vue';
 import { DefaultApolloClient } from '@vue/apollo-composable';
 import { ApolloClient, InMemoryCache } from '@apollo/client';
@@ -747,6 +756,8 @@ const app = createApp({
 app.mount('#app');
 
 ```
+
+`App.vue`も以下のように修正します。
 
 ```vue:App.vue
 <template>
@@ -796,9 +807,15 @@ app.mount('#app');
 
 ```
 
-この通り、タスク管理アプリが完成した。
+この通り、タスク管理アプリが完成しました。
 
 ![](/images/articles/graphql-app/vue_3.png)
+
+## まとめ
+
+今回は、Apollo Severを使って、簡単なgraphqlアプリを作りました。
+ついでにdockerを使ってコンテナ化もチャレンジしました。
+わりとすっとAPIが作成できて便利ですね。
 
 
 ## 参考
